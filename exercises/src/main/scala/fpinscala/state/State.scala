@@ -87,54 +87,67 @@ object RNG {
   def sequence[A](fs: List[Rand[A]]): Rand[List[A]] =
     rng => {
       fs match {
-        case x :: xs => map2(x,sequence(xs))((a,as) => a::as)(rng)
-        case Nil => (Nil,rng)
+        case x :: xs => map2(x, sequence(xs))((a, as) => a :: as)(rng)
+        case Nil => (Nil, rng)
       }
     }
 
   // or use fold and use placeholder syntax
   def sequence2[A](fs: List[Rand[A]]): Rand[List[A]] =
-      fs.foldRight[Rand[List[A]]](unit(Nil))(map2(_,_)( _::_))
+    fs.foldRight[Rand[List[A]]](unit(Nil))(map2(_, _)(_ :: _))
 
   // or use a fold and some parameter names
   def sequence3[A](fs: List[Rand[A]]): Rand[List[A]] =
-      fs.foldRight[Rand[List[A]]](r => (Nil,r))((f,fs) =>map2(f,fs)((a,as) => a::as))
+    fs.foldRight[Rand[List[A]]](r => (Nil, r))((f, fs) => map2(f, fs)((a, as) => a :: as))
 
   def flatMap[A, B](f: Rand[A])(g: A => Rand[B]): Rand[B] =
     rng => {
-      val (a,rng2) = f(rng)
+      val (a, rng2) = f(rng)
       g(a)(rng2)
     }
 
 
-
   def nonNegativeLessThan(n: Int): Rand[Int] = {
-    flatMap(nonNegativeInt){i =>
-    val mod = i % n
-    if (i + (n-1) - mod >= 0)
-      unit(mod)
-    else nonNegativeLessThan(n)}
+    flatMap(nonNegativeInt) { i =>
+      val mod = i % n
+      if (i + (n - 1) - mod >= 0)
+        unit(mod)
+      else nonNegativeLessThan(n)
+    }
   }
 
   def mapInTermsOfFlatMap[A, B](s: Rand[A])(f: A => B): Rand[B] =
-      flatMap(s)(f andThen unit)
+    flatMap(s)(f andThen unit)
 
 
   def map2InTermsOfFlatMap[A, B, C](ra: Rand[A], rb: Rand[B])(f: (A, B) => C): Rand[C] =
-    flatMap(ra){a =>
-      flatMap(rb)(b => unit(f(a,b)))
+    flatMap(ra) { a =>
+      flatMap(rb)(b => unit(f(a, b))) // could have used map
     }
 }
 
 case class State[S, +A](run: S => (A, S)) {
-  def map[B](f: A => B): State[S, B] =
-    sys.error("todo")
+  def map[B](f: A => B): State[S, B] = State(s => {
+    val (a, s2) = run(s)
+    (f(a), s2)
+  })
+
 
   def map2[B, C](sb: State[S, B])(f: (A, B) => C): State[S, C] =
-    sys.error("todo")
+    State(
+    s => {
+      val (a, s2) = run(s)
+      val (b, s3) = sb.run(s2)
+      (f(a, b), s3)
+    })
 
   def flatMap[B](f: A => State[S, B]): State[S, B] =
-    sys.error("todo")
+    State( s => {
+      val (a, s2) = run(s)
+      f(a).run(s2)
+    })
+
+
 }
 
 sealed trait Input
@@ -147,5 +160,7 @@ case class Machine(locked: Boolean, candies: Int, coins: Int)
 
 object State {
   type Rand[A] = State[RNG, A]
+  def unit[S,A](a: A): State[S,A] = State({s => (a, s)})
+
   def simulateMachine(inputs: List[Input]): State[Machine, (Int, Int)] = ???
 }
