@@ -48,9 +48,34 @@ object Par {
     es => fa(es)
 
   def choice[A](cond: Par[Boolean])(t: Par[A], f: Par[A]): Par[A] =
-    es =>
+    es => 
       if (run(es)(cond).get) t(es) // Notice we are blocking on the result of `cond`.
       else f(es)
+
+  def choiceN[A](n: Par[Int])(choices: List[Par[A]]): Par[A] = ???
+
+  def choice[A](cond: Par[Boolean])(t: Par[A], f: Par[A]): Par[A] = choiceN(unit(2))(List(t, f))
+
+  def chooser[A, B](pa: Par[A])(choices: A => Par[B]): Par[B] = {
+    es => val a = run(es)(pa).get
+      run(es)(choices(a))
+  }
+
+  def flatMap[A, B](pa: Par[A])(choices: A => Par[B]): Par[B] = chooser(pa)(choices)
+
+  def join[A](a: Par[Par[A]]): Par[A] = {
+    es =>
+      val fpa: Future[Par[A]] = run(es)(a)
+      val parA: Par[A] = fpa.get()
+      parA(es)
+  }
+
+  def joinInTermsOfFlatMap[A](a: Par[Par[A]]): Par[A] = {
+    flatMap(a)(identity)
+  }
+
+  def flatMapInTermsOfJoin[A, B](pa: Par[A])(choices: A => Par[B]): Par[B] =
+    join(map(pa)(choices))
 
   /* Gives us infix syntax for `Par`. */
   //implicit def toParOps[A](p: Par[A]): ParOps[A] = new ParOps(p)
